@@ -9,8 +9,8 @@
         }
     },
     "remoteUser": "dev",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
     "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/$(localWorkspaceFolderBasename},type=bind",
     "forwardPorts": [8888],
     "customizations": {
         "vscode": {

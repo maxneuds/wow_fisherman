@@ -1,62 +1,53 @@
-FROM python:3.11-bookworm
+FROM python:3.12-bookworm
 
-ENV USER_GID=1000
-ENV USER_UID=1000
-ENV DOCKER_GID=965
-ENV USERNAME=worker
-ENV HOME=/home/${USERNAME}
+ENV USERNAME=dev
+ARG UID
+ARG GID
+ARG DOCKER_GID
 
 # Setup container user, groups and home
-RUN groupadd -g ${USER_GID} ${USERNAME} && \
-    useradd -m -u ${USER_UID} -g ${USER_GID} ${USERNAME} && \
-    mkdir /workspace && \
-    chown ${USERNAME}:${USERNAME} /workspace
+RUN if id -u ${UID} > /dev/null 2>&1; then userdel -f $(getent passwd ${UID} | cut -d: -f1); fi
+RUN if getent group ${GID} > /dev/null 2>&1; then groupdel ${GID}; fi
+RUN groupadd -g ${UID} ${USERNAME} && \
+    useradd -m -u ${GID} -g ${GID} ${USERNAME} && \
+    mkdir /workspace && chown ${USERNAME}:${USERNAME} /workspace
 
-# Install advanced python dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential libssl-dev libffi-dev python3-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Update repo
+RUN apt-get clean && apt-get update
 
+# Make sure locales are set to en_US.UTF-8
+RUN apt-get install -y locales && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# <-- PYTHON -->
+# Install advanced python build dependencies
+RUN apt-get install -y \
+    build-essential libssl-dev libffi-dev zlib1g-dev libbz2-dev \
+    libreadline-dev libsqlite3-dev python3-dev
 # Install opencv display dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get install -y \
     libgl1-mesa-glx libx11-dev libwayland-client0 x11-utils qtwayland5
-
-# Install ADB
-RUN groupadd -r adbusers && usermod -aG adbusers ${USERNAME}
-RUN apt-get update && apt-get install -y \
-    adb \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# <-- PYTHON -->
 
 # <- DEVCONTAINER ->
 # Enable sudo permissions for container user
-RUN apt-get update && apt-get install -y sudo&& \
+RUN apt-get install -y sudo && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-# Make sure locals are set
-RUN apt-get update && apt-get install -y locales locales-all \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-ENV LC_ALL en_US.UTF-8
-ENV LANG en_US.UTF-8
 # Install zsh and other useful packages
-RUN apt-get update && apt-get install -y \
-    git wget curl unzip rsync zsh htop vim neofetch \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get install -y \
+    zsh git wget curl unzip rsync htop vim neofetch
 # Install Docker
 RUN groupadd -g ${DOCKER_GID} docker
-RUN apt-get update && apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get install -y \
+    apt-transport-https ca-certificates curl gnupg lsb-release
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-RUN apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io
+# Add container user to docker group
+RUN usermod -aG docker ${USERNAME}
 # Set up the environment for the container user
-RUN chsh -s /bin/zsh ${USERNAME} && \
-    usermod -aG docker ${USERNAME} && \
-    mkdir /workspace/dev && chown ${USERNAME}:${USERNAME} /workspace/dev
+RUN chsh -s /bin/zsh ${USERNAME}
 # Switch to container user and set home directory
 USER ${USERNAME}
 # Install oh-my-zsh
@@ -75,13 +66,15 @@ RUN echo 'alias cp="rsync -avh --progress"' >> ${HOME}/.zshrc
 USER root
 # <- DEVCONTAINER ->
 
+# Apt cleanup
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Switch user
+USER ${USERNAME}
+
 # Install poetry
 RUN pip install poetry
 ENV PATH="${HOME}/.local/bin:$PATH"
+ENV POETRY_VIRTUALENV_CREATE=true
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
-ENV POETRY_VIRTUALENVS_OPTIONS_ALWAYS_COPY=true
-
-# Entrypoint
-USER ${USERNAME}
-WORKDIR /workspace/dev
-CMD ["/bin/zsh"]
+ENV POETRY_NO_INTERACTION=1
