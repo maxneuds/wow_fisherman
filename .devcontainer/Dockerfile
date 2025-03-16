@@ -73,8 +73,9 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 USER ${USERNAME}
 
 # Install poetry
+RUN pip install --upgrade pip
 RUN pip install poetry
-ENV PATH="${HOME}/.local/bin:$PATH"
+ENV PATH="/home/dev/.local/bin:$PATH"
 ENV POETRY_VIRTUALENV_CREATE=true
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 ENV POETRY_NO_INTERACTION=1
